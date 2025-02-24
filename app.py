@@ -3,21 +3,25 @@ import subprocess
 import os
 
 # Sidebar settings for subtitle style
+# Sidebar settings for subtitle style
 st.sidebar.header("🎨 Subtitle Styling Settings")
 font_name = st.sidebar.text_input("Font Name", "Nunito")
 font_size = st.sidebar.slider("Font Size", 20, 100, 62)
 primary_color = st.sidebar.color_picker("Primary Colour", "#FFFFFF")
 secondary_color = st.sidebar.color_picker("Secondary Colour", "#0000FF")
 outline_color = st.sidebar.color_picker("Outline Colour", "#000000")
-back_color = st.sidebar.color_picker("Background Colour", "#80000000")
+background_color = st.sidebar.color_picker("Background Colour", "#000000")  # Use valid hex
+background_opacity = st.sidebar.slider("Background Opacity", 0, 100, 50)  # Opacity in percentage
 bold = st.sidebar.checkbox("Bold", True)
 italic = st.sidebar.checkbox("Italic", False)
 alignment = st.sidebar.selectbox("Alignment", ["Bottom Center (2)", "Top Center (8)", "Middle Center (5)"], index=0)
 
-# Convert HEX to ASS format
-def hex_to_ass_color(hex_color):
+# Convert HEX and opacity to ASS format
+def hex_to_ass_color(hex_color, opacity=100):
     hex_color = hex_color.lstrip('#')
-    return f"&H00{hex_color[4:6]}{hex_color[2:4]}{hex_color[0:2]}"
+    alpha = int((100 - opacity) * 2.55)  # Convert 0-100% to 0-255
+    return f"&H{alpha:02X}{hex_color[4:6]}{hex_color[2:4]}{hex_color[0:2]}"
+
 
 # Convert VTT to ASS with custom styling
 def convert_vtt_to_ass(vtt_path, ass_path):
