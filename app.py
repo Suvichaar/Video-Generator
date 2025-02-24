@@ -89,7 +89,7 @@ def burn_subtitles_with_background(vtt_file, background_image, audio_file, outpu
     os.remove(ass_file)
 
 # Streamlit UI
-st.title("Subtitle Video Generator")
+st.title("Video Generator")
 
 vtt_file = st.file_uploader("Upload Subtitle File (.vtt)", type=["vtt"])
 background_image = st.file_uploader("Upload Background Image", type=["jpg", "jpeg", "png"])
