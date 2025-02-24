@@ -1,6 +1,11 @@
 import streamlit as st
 import subprocess
 import os
+import shutil
+
+# Check if FFmpeg is installed
+def check_ffmpeg():
+    return shutil.which("ffmpeg") is not None
 
 def convert_vtt_to_ass(vtt_path, ass_path):
     ass_template = """[Script Info]
@@ -35,58 +40,61 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 start = convert_time(start)
                 end = convert_time(end)
                 text = lines[i + 1].strip() if i + 1 < len(lines) else ''
-
                 effect = "{\\fad(500,500)}"
-
                 if text:
                     ass.write(f"Dialogue: 0,{start},{end},Default,,0,0,0,,{effect}{text}\n")
 
 def burn_subtitles_with_background(vtt_file, background_image, audio_file, output_video):
+    if not check_ffmpeg():
+        raise Exception("FFmpeg is not installed or not found in PATH. Please install it.")
+
     ass_file = "converted_subtitles.ass"
     convert_vtt_to_ass(vtt_file, ass_file)
 
     temp_bg_video = "temp_background.mp4"
     temp_final_video = "temp_final.mp4"
 
-    create_bg_command = [
-        "ffmpeg", "-y",
-        "-loop", "1",
-        "-i", background_image,
-        "-c:v", "libx264",
-        "-t", "3:14",
-        "-vf", "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2",
-        "-pix_fmt", "yuv420p",
-        temp_bg_video
-    ]
+    try:
+        create_bg_command = [
+            "ffmpeg", "-y",
+            "-loop", "1",
+            "-i", background_image,
+            "-c:v", "libx264",
+            "-t", "3:14",
+            "-vf", "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2",
+            "-pix_fmt", "yuv420p",
+            temp_bg_video
+        ]
+        subprocess.run(create_bg_command, check=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
 
-    subprocess.run(create_bg_command, check=True)
+        burn_subs_command = [
+            "ffmpeg", "-y",
+            "-i", temp_bg_video,
+            "-vf", f"ass={ass_file}",
+            "-c:v", "libx264",
+            "-preset", "slow",
+            "-crf", "18",
+            temp_final_video
+        ]
+        subprocess.run(burn_subs_command, check=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
 
-    burn_subs_command = [
-        "ffmpeg", "-y",
-        "-i", temp_bg_video,
-        "-vf", f"ass={ass_file}",
-        "-c:v", "libx264",
-        "-preset", "slow",
-        "-crf", "18",
-        temp_final_video
-    ]
-    subprocess.run(burn_subs_command, check=True)
+        add_audio_command = [
+            "ffmpeg", "-y",
+            "-i", temp_final_video,
+            "-i", audio_file,
+            "-c:v", "copy",
+            "-c:a", "aac",
+            "-b:a", "192k",
+            "-shortest",
+            output_video
+        ]
+        subprocess.run(add_audio_command, check=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
 
-    add_audio_command = [
-        "ffmpeg", "-y",
-        "-i", temp_final_video,
-        "-i", audio_file,
-        "-c:v", "copy",
-        "-c:a", "aac",
-        "-b:a", "192k",
-        "-shortest",
-        output_video
-    ]
-    subprocess.run(add_audio_command, check=True)
-
-    os.remove(temp_bg_video)
-    os.remove(temp_final_video)
-    os.remove(ass_file)
+    finally:
+        # Clean up temporary files even if an error occurs
+        for file in [temp_bg_video, temp_final_video, ass_file]:
+            if os.path.exists(file):
+                os.remove(file)
 
 # Streamlit UI
 st.title("Video Generator")
@@ -98,7 +106,9 @@ audio_file = st.file_uploader("Upload Audio File", type=["mp3"])
 output_filename = st.text_input("Enter Output Video Filename", "output_video.mp4")
 
 if st.button("Generate Video"):
-    if vtt_file and background_image and audio_file:
+    if not check_ffmpeg():
+        st.error("FFmpeg is not installed or not found in PATH. Please install FFmpeg to proceed.")
+    elif vtt_file and background_image and audio_file:
         with open("uploaded_subtitles.vtt", "wb") as f:
             f.write(vtt_file.read())
         with open("uploaded_background.jpg", "wb") as f:
@@ -116,7 +126,9 @@ if st.button("Generate Video"):
                     file_name=output_filename,
                     mime="video/mp4"
                 )
+        except subprocess.CalledProcessError as e:
+            st.error(f"FFmpeg error: {e.stderr.decode() if e.stderr else str(e)}")
         except Exception as e:
-            st.error(f"Error: {e}")
+            st.error(f"Error: {str(e)}")
     else:
         st.warning("Please upload all required files.")
